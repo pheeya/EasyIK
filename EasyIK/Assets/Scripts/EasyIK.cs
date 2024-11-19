@@ -1,9 +1,14 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+#if UNITY_EDITOR 
 using UnityEditor;
+
+#endif 
 using System.Linq;
 
+
+[ExecuteAlways]
 public class EasyIK : MonoBehaviour
 {
 
@@ -15,13 +20,19 @@ public class EasyIK : MonoBehaviour
         ManualUpdate
     }
 
-    [Header("IK properties")]
+    [Header("Options")]
     [SerializeField] UpdateMode m_updateMode;
+    [SerializeField] bool m_automaticallyFindJointTransforms;
+    [SerializeField, Tooltip("WARNING: Enabling this will modify the transforms at edit time")] bool m_updateInEditor;
+
+    [Header("IK properties")]
+
     public int numberOfJoints = 2;
     public Transform ikTarget;
     public int iterations = 10;
     public float tolerance = 0.05f;
-    private Transform[] jointTransforms;
+    [SerializeField, Tooltip("WARNING: Enabling this will force rotation of the last bone to match the ik target if UpdateInEditor is enabled")] bool m_useRotationOffsetForLastJointFromIKTarget;
+    [SerializeField] private Transform[] jointTransforms;
     private Vector3 startPosition;
     private Vector3[] jointPositions;
     private float[] boneLength;
@@ -44,43 +55,110 @@ public class EasyIK : MonoBehaviour
     public float gizmoSize = 0.05f;
     public bool poleDirection = false;
     public bool poleRotationAxis = false;
+    bool m_ready;
 
-    void Awake()
+    void OnValidate()
     {
-        // Let's set some properties
+        Initialize();
+    }
+
+    void Initialize()
+    {
+        m_ready = false;
         jointChainLength = 0;
-        jointTransforms = new Transform[numberOfJoints];
+
+
+        if (m_automaticallyFindJointTransforms)
+        {
+            jointTransforms = new Transform[numberOfJoints];
+        }
+
         jointPositions = new Vector3[numberOfJoints];
         boneLength = new float[numberOfJoints];
         jointStartDirection = new Vector3[numberOfJoints];
         startRotation = new Quaternion[numberOfJoints];
         ikTargetStartRot = ikTarget.rotation;
 
+
+
+
         var current = transform;
+        Transform next;
+        int transformsFound = 1; // the transform this script is attached to
+
 
         // For each bone calculate and store the lenght of the bone
         for (var i = 0; i < jointTransforms.Length; i += 1)
         {
-            jointTransforms[i] = current;
+            if (!m_automaticallyFindJointTransforms)
+            {
+                current = jointTransforms[i];
+
+            }
+            else
+            {
+                jointTransforms[i] = current;
+
+
+
+            }
+
+
             // If the bones lenght equals the max lenght, we are on the last joint in the chain
             if (i == jointTransforms.Length - 1)
             {
                 lastJointStartRot = current.rotation;
-                return;
+                break;
             }
             // Store length and add the sum of the bone lengths
             else
             {
-                boneLength[i] = Vector3.Distance(current.position, current.GetChild(0).position);
+
+                if (m_automaticallyFindJointTransforms)
+                {
+                    // int c = current.childCount;
+                    // if (c == 0) break;
+                    next = current.GetChild(0);
+                }
+                else
+                {
+                    next = jointTransforms[i + 1];
+                }
+
+                // if (next == null) break;
+
+                boneLength[i] = Vector3.Distance(current.position, next.position);
                 jointChainLength += boneLength[i];
 
-                jointStartDirection[i] = current.GetChild(0).position - current.position;
+                jointStartDirection[i] = next.position - current.position;
                 startRotation[i] = current.rotation;
             }
-            // Move the iteration to next joint in the chain
-            current = current.GetChild(0);
+
+            if (m_automaticallyFindJointTransforms)
+            {
+                // Move the iteration to next joint in the chain
+                current = current.GetChild(0);
+            }
+
+
+            transformsFound++;
         }
+
+        m_ready = transformsFound == numberOfJoints;
+        if (!m_ready)
+        {
+            Debug.LogWarning("EasyIK Warning: The number of transforms in chain do not match the set number of joints, click to focus on gameobject", gameObject);
+        }
+
+
+
     }
+    void Awake()
+    {
+        Initialize();
+    }
+
+
 
 
     void PoleConstraint()
@@ -191,10 +269,24 @@ public class EasyIK : MonoBehaviour
             jointTransforms[i].position = jointPositions[i];
             var targetRotation = Quaternion.FromToRotation(jointStartDirection[i], jointPositions[i + 1] - jointPositions[i]);
             jointTransforms[i].rotation = targetRotation * startRotation[i];
+
+
         }
-        // Let's constrain the rotation of the last joint to the IK target and maintain the offset.
-        Quaternion offset = lastJointStartRot * Quaternion.Inverse(ikTargetStartRot);
-        jointTransforms.Last().rotation = ikTarget.rotation * offset;
+
+
+        if (m_useRotationOffsetForLastJointFromIKTarget)
+        {
+            // Let's constrain the rotation of the last joint to the IK target and maintain the offset.
+            Quaternion offset = Quaternion.Inverse(ikTargetStartRot) * lastJointStartRot;
+            jointTransforms.Last().rotation = ikTarget.rotation * offset;
+        }
+        else
+        {
+
+            jointTransforms.Last().rotation = ikTarget.rotation;
+        }
+
+
     }
 
 
@@ -205,6 +297,12 @@ public class EasyIK : MonoBehaviour
     }
     void LateUpdate()
     {
+
+        if (Application.isEditor && !Application.isPlaying && m_updateInEditor)
+        {
+            SolveIK();
+        }
+
         if (m_updateMode != UpdateMode.LateUpdate) return;
         OnUpdate();
 
@@ -216,16 +314,19 @@ public class EasyIK : MonoBehaviour
     }
     public void OnUpdate()
     {
+        if (!Application.isPlaying) return;
         SolveIK();
     }
+#if UNITY_EDITOR 
 
     // Visual debugging
     void OnDrawGizmos()
     {
+        if (!m_ready) return;
         if (debugJoints == true)
         {
-            var current = transform;
-            var child = transform.GetChild(0);
+            var current = jointTransforms[0];
+            var child = jointTransforms[1];
 
             for (int i = 0; i < numberOfJoints; i += 1)
             {
@@ -239,8 +340,8 @@ public class EasyIK : MonoBehaviour
                 {
                     var length = Vector3.Distance(current.position, child.position);
                     DrawWireCapsule(current.position + (child.position - current.position).normalized * length / 2, Quaternion.FromToRotation(Vector3.up, (child.position - current.position).normalized), gizmoSize, length, Color.cyan);
-                    current = current.GetChild(0);
-                    child = current.GetChild(0);
+                    current = jointTransforms[i+1];
+                    child = jointTransforms[i+2];
                 }
             }
         }
@@ -257,14 +358,14 @@ public class EasyIK : MonoBehaviour
                 else
                 {
                     drawHandle(current);
-                    current = current.GetChild(0);
+                    current = jointTransforms[i+1];
                 }
             }
         }
 
-        var start = transform;
-        var mid = start.GetChild(0);
-        var end = mid.GetChild(0);
+        var start = jointTransforms[0];
+        var mid = jointTransforms[1];
+        var end = jointTransforms[2];
 
         if (poleRotationAxis == true && poleTarget != null && numberOfJoints < 4)
         {
@@ -315,4 +416,6 @@ public class EasyIK : MonoBehaviour
             Handles.DrawWireDisc(Vector3.down * pointOffset, Vector3.up, _radius);
         }
     }
+
+#endif 
 }
