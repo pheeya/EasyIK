@@ -72,11 +72,7 @@ public class EasyIK : MonoBehaviour
         }
     }
 
-    void Start()
-    {
-
-    }
-
+ 
     void PoleConstraint()
     {
         if (poleTarget != null && numberOfJoints < 4)
@@ -191,7 +187,7 @@ public class EasyIK : MonoBehaviour
         jointTransforms.Last().rotation = ikTarget.rotation * offset;
     }
 
-    void Update()
+    public void OnUpdate()
     {
         SolveIK();
     }
