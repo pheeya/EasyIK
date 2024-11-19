@@ -6,7 +6,17 @@ using System.Linq;
 
 public class EasyIK : MonoBehaviour
 {
+
+    enum UpdateMode
+    {
+        Update,
+        LateUpdate,
+        FixedUpdate,
+        ManualUpdate
+    }
+
     [Header("IK properties")]
+    [SerializeField] UpdateMode m_updateMode;
     public int numberOfJoints = 2;
     public Transform ikTarget;
     public int iterations = 10;
@@ -72,7 +82,7 @@ public class EasyIK : MonoBehaviour
         }
     }
 
- 
+
     void PoleConstraint()
     {
         if (poleTarget != null && numberOfJoints < 4)
@@ -83,7 +93,7 @@ public class EasyIK : MonoBehaviour
             // Get the direction from the root joint to the pole target and mid joint
             Vector3 poleDirection = (poleTarget.position - jointPositions[0]).normalized;
             Vector3 boneDirection = (jointPositions[1] - jointPositions[0]).normalized;
-            
+
             // Ortho-normalize the vectors
             Vector3.OrthoNormalize(ref limbAxis, ref poleDirection);
             Vector3.OrthoNormalize(ref limbAxis, ref boneDirection);
@@ -187,6 +197,23 @@ public class EasyIK : MonoBehaviour
         jointTransforms.Last().rotation = ikTarget.rotation * offset;
     }
 
+
+    void Update()
+    {
+        if (m_updateMode != UpdateMode.Update) return;
+        OnUpdate();
+    }
+    void LateUpdate()
+    {
+        if (m_updateMode != UpdateMode.LateUpdate) return;
+        OnUpdate();
+
+    }
+    void FixedUpdate()
+    {
+        if (m_updateMode != UpdateMode.FixedUpdate) return;
+        OnUpdate();
+    }
     public void OnUpdate()
     {
         SolveIK();
@@ -194,9 +221,9 @@ public class EasyIK : MonoBehaviour
 
     // Visual debugging
     void OnDrawGizmos()
-    {   
+    {
         if (debugJoints == true)
-        {   
+        {
             var current = transform;
             var child = transform.GetChild(0);
 
@@ -219,7 +246,7 @@ public class EasyIK : MonoBehaviour
         }
 
         if (localRotationAxis == true)
-        {    
+        {
             var current = transform;
             for (int i = 0; i < numberOfJoints; i += 1)
             {
@@ -240,13 +267,13 @@ public class EasyIK : MonoBehaviour
         var end = mid.GetChild(0);
 
         if (poleRotationAxis == true && poleTarget != null && numberOfJoints < 4)
-        {    
+        {
             Handles.color = Color.white;
             Handles.DrawLine(start.position, end.position);
         }
 
         if (poleDirection == true && poleTarget != null && numberOfJoints < 4)
-        {    
+        {
             Handles.color = Color.grey;
             Handles.DrawLine(start.position, poleTarget.position);
             Handles.DrawLine(end.position, poleTarget.position);
@@ -258,7 +285,7 @@ public class EasyIK : MonoBehaviour
     {
         Handles.color = Handles.xAxisColor;
         Handles.ArrowHandleCap(0, debugJoint.position, debugJoint.rotation * Quaternion.LookRotation(Vector3.right), gizmoSize, EventType.Repaint);
-                
+
         Handles.color = Handles.yAxisColor;
         Handles.ArrowHandleCap(0, debugJoint.position, debugJoint.rotation * Quaternion.LookRotation(Vector3.up), gizmoSize, EventType.Repaint);
 
@@ -266,8 +293,8 @@ public class EasyIK : MonoBehaviour
         Handles.ArrowHandleCap(0, debugJoint.position, debugJoint.rotation * Quaternion.LookRotation(Vector3.forward), gizmoSize, EventType.Repaint);
     }
 
-     public static void DrawWireCapsule(Vector3 _pos, Quaternion _rot, float _radius, float _height, Color _color = default(Color))
-     {
+    public static void DrawWireCapsule(Vector3 _pos, Quaternion _rot, float _radius, float _height, Color _color = default(Color))
+    {
         Handles.color = _color;
         Matrix4x4 angleMatrix = Matrix4x4.TRS(_pos, _rot, Handles.matrix.lossyScale);
         using (new Handles.DrawingScope(angleMatrix))
@@ -286,6 +313,6 @@ public class EasyIK : MonoBehaviour
 
             Handles.DrawWireDisc(Vector3.up * pointOffset, Vector3.up, _radius);
             Handles.DrawWireDisc(Vector3.down * pointOffset, Vector3.up, _radius);
-         }
-     }
+        }
+    }
 }
