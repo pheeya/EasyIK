@@ -31,7 +31,7 @@ public class EasyIK : MonoBehaviour
     public Transform ikTarget;
     public int iterations = 10;
     public float tolerance = 0.05f;
-    [SerializeField, Tooltip("WARNING: Enabling this will force rotation of the last bone to match the ik target if UpdateInEditor is enabled")] bool m_useRotationOffsetForLastJointFromIKTarget;
+    [SerializeField, Tooltip("WARNING: Disabling this will force rotation of the last bone to match the ik target if UpdateInEditor is enabled")] bool m_useRotationOffsetForLastJointFromIKTarget;
     [SerializeField] private Transform[] jointTransforms;
     private Vector3 startPosition;
     private Vector3[] jointPositions;
